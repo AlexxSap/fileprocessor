@@ -1,8 +1,11 @@
 package fileprocessor
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -14,6 +17,24 @@ func compareSlices[T comparable](act, exp []T) error {
 	for i := 0; i < len(act); i++ {
 		if act[i] != exp[i] {
 			return fmt.Errorf("act: %v exp: %v at index: %d", act[i], exp[i], i)
+		}
+	}
+
+	return nil
+}
+
+func compareMaps[K, V comparable](act, exp map[K]V) error {
+	if len(act) != len(exp) {
+		return errors.New("different len")
+	}
+
+	for eKey, eValue := range exp {
+		aValue, isIn := act[eKey]
+		if !isIn {
+			return fmt.Errorf("key %v not int act", eKey)
+		}
+		if eValue != aValue {
+			return fmt.Errorf("act: %v exp: %v at key: %v", eValue, aValue, eKey)
 		}
 	}
 
@@ -135,6 +156,33 @@ func Test_ProcessRow(t *testing.T) {
 	}
 	if frequentResCount != 3 {
 		t.Errorf("wrong frequent count %d", frequentResCount)
+	}
+}
+
+func Test_ProcessSequential(t *testing.T) {
+
+	data := "a;1;z\nb;2;z\na;3;z"
+	scan := bufio.NewScanner(strings.NewReader(data))
+
+	m := make(map[string]int)
+	frequentFirst := func(s []string) {
+		m[s[0]]++
+	}
+
+	sum := 0
+	summOfSecond := func(s []string) {
+		v, _ := strconv.Atoi(s[1])
+		sum += v
+	}
+
+	ProcessSequential(scan, []func(s []string){frequentFirst, summOfSecond})
+
+	if sum != 6 {
+		t.Errorf("wrong summ of second %d", sum)
+	}
+
+	if err := compareMaps(m, map[string]int{"a": 2, "b": 1}); err != nil {
+		t.Error(err)
 	}
 
 }
