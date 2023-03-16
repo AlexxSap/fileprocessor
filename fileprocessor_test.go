@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -185,4 +186,38 @@ func Test_ProcessSequential(t *testing.T) {
 		t.Error(err)
 	}
 
+}
+
+func Test_ProcessFileSequential(t *testing.T) {
+	fileName := "testFile.csv"
+	defer os.Remove(fileName)
+
+	{
+		f, err := os.Create(fileName)
+		if err != nil {
+			t.Error(err)
+		}
+		defer f.Close()
+
+		data := "a;1;z\nb;2;z\na;3;z"
+		_, err = f.WriteString(data)
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	sum := 0
+	summOfSecond := func(s []string) {
+		v, _ := strconv.Atoi(s[1])
+		sum += v
+	}
+
+	err := ProcessFileSequential(fileName, []func(s []string){summOfSecond})
+	if err != nil {
+		t.Error(err)
+	}
+
+	if sum != 6 {
+		t.Errorf("wrong summ of second %d", sum)
+	}
 }
