@@ -221,3 +221,49 @@ func Test_ProcessFileSequential(t *testing.T) {
 		t.Errorf("wrong summ of second %d", sum)
 	}
 }
+
+func BenchmarkProcessFile(b *testing.B) {
+	fileName := "benchFile.csv"
+	defer os.Remove(fileName)
+
+	{
+		f, err := os.Create(fileName)
+		if err != nil {
+			b.Error(err)
+		}
+		defer f.Close()
+
+		for i := 0; i < 1000; i++ {
+			data := "ahfdjhgkfd;" + strconv.Itoa(i) + ";asdfdfgkdkfjgkfdjgz\n"
+			_, err = f.WriteString(data)
+			if err != nil {
+				b.Error(err)
+			}
+		}
+	}
+
+	summOfSecond := func(s []string) {
+		strconv.Atoi(s[1])
+	}
+
+	cases := []struct {
+		name string
+		fn   func()
+	}{
+		{
+			name: "sequential",
+			fn: func() {
+				ProcessFileSequential(fileName, []func(s []string){summOfSecond})
+			},
+		},
+	}
+
+	for _, c := range cases {
+		b.Run(c.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				c.fn()
+			}
+		})
+	}
+
+}
