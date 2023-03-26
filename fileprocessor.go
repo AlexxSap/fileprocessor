@@ -34,16 +34,15 @@ func ProcessFileSequential(fileName string, processors []func([]string)) error {
 }
 
 type Processor[P any] interface {
-	ProcessString(string) P
+	ProcessString(*P, string)
 }
 
 type Accumulator[A any, P Processor[P]] interface {
-	Accumulate(P) A
+	Accumulate(*A, P)
 }
 
-func reader(ctx context.Context, scanner *bufio.Scanner, bufferSize int) <-chan []string {
+func reader(ctx context.Context, scanner *bufio.Scanner, bufferSize int, buffer *[]string) <-chan []string {
 	out := make(chan []string)
-	buffer := []string{}
 
 	go func() {
 		defer close(out)
@@ -54,12 +53,12 @@ func reader(ctx context.Context, scanner *bufio.Scanner, bufferSize int) <-chan 
 				return
 			default:
 				row := scanner.Text()
-				if len(buffer) == bufferSize || !scanned {
-					out <- buffer
-					buffer = []string{}
+				if len(*buffer) == bufferSize || !scanned {
+					out <- *buffer
+					*buffer = []string{}
 				}
 
-				buffer = append(buffer, row)
+				*buffer = append(*buffer, row)
 			}
 
 			if !scanned {
@@ -71,30 +70,29 @@ func reader(ctx context.Context, scanner *bufio.Scanner, bufferSize int) <-chan 
 	return out
 }
 
-func worker[P Processor[P]](buffer <-chan []string) <-chan []P {
-	out := make(chan []P)
+func worker[P Processor[P]](buffer <-chan []string) <-chan P {
+	out := make(chan P)
 
 	go func() {
 		defer close(out)
 
 		var p P
 		for rows := range buffer {
-			res := make([]P, len(rows))
 			for _, row := range rows {
-				res = append(res, p.ProcessString(row))
+				p.ProcessString(&p, row)
 			}
-			out <- res
 		}
+		out <- p
 	}()
 
 	return out
 }
 
-func combiner[P Processor[P]](ctx context.Context, inputs ...<-chan []P) <-chan []P {
-	out := make(chan []P)
+func combiner[P Processor[P]](ctx context.Context, inputs ...<-chan P) <-chan P {
+	out := make(chan P)
 
 	var wg sync.WaitGroup
-	multiplexer := func(p <-chan []P) {
+	multiplexer := func(p <-chan P) {
 		defer wg.Done()
 
 		for in := range p {
@@ -122,20 +120,19 @@ func processConcurrent[P Processor[P], A Accumulator[A, P]](scanner *bufio.Scann
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	bufferSize := 3
-	workersSize := 3
-	rowCh := reader(ctx, scanner, bufferSize)
+	bufferSize := 1000
+	workersSize := 8
+	rowsBuffer := make([]string, 0, bufferSize)
+	rowCh := reader(ctx, scanner, bufferSize, &rowsBuffer)
 
-	workersCh := make([]<-chan []P, workersSize)
+	workersCh := make([]<-chan P, workersSize)
 	for i := 0; i < workersSize; i++ {
 		workersCh[i] = worker[P](rowCh)
 	}
 
 	var accumulator A
 	for processed := range combiner(ctx, workersCh...) {
-		for _, p := range processed {
-			accumulator = accumulator.Accumulate(p)
-		}
+		accumulator.Accumulate(&accumulator, processed)
 	}
 
 	return accumulator

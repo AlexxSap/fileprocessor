@@ -192,18 +192,18 @@ type FirstNumberProcessor struct {
 	firstNumber int
 }
 
-func (proc FirstNumberProcessor) ProcessString(row string) FirstNumberProcessor {
+func (proc FirstNumberProcessor) ProcessString(p *FirstNumberProcessor, row string) {
 	rows := strings.Split(row, ";")
 	v, _ := strconv.Atoi(rows[1])
-	return FirstNumberProcessor{firstNumber: proc.firstNumber + v}
+	p.firstNumber += v
 }
 
 type FirstNumberAccumulator struct {
 	firstNumber int
 }
 
-func (acc FirstNumberAccumulator) Accumulate(row FirstNumberProcessor) FirstNumberAccumulator {
-	return FirstNumberAccumulator{acc.firstNumber + row.firstNumber}
+func (acc FirstNumberAccumulator) Accumulate(a *FirstNumberAccumulator, row FirstNumberProcessor) {
+	a.firstNumber += row.firstNumber
 }
 
 func Test_ProcessFileConcurrentSimple(t *testing.T) {
@@ -283,7 +283,7 @@ func BenchmarkProcessFile(b *testing.B) {
 		}
 		defer f.Close()
 
-		for i := 0; i < 1000; i++ {
+		for i := 0; i < 100000; i++ {
 			data := "ahfdjhgkfd;" + strconv.Itoa(i) + ";asdfdfgkdkfjgkfdjgz\n"
 			_, err = f.WriteString(data)
 			if err != nil {
