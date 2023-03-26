@@ -32,6 +32,14 @@ func ProcessFileSequential(fileName string, processors []func([]string)) error {
 	return nil
 }
 
+type Processor[P any] interface {
+	ProcessString(string) P
+}
+
+type Accumulator[A any, P any] interface {
+	Accumulate(P) A
+}
+
 func reader(ctx context.Context, scanner *bufio.Scanner, bufferSize int) <-chan []string {
 	out := make(chan []string)
 	buffer := []string{}
@@ -62,7 +70,7 @@ func reader(ctx context.Context, scanner *bufio.Scanner, bufferSize int) <-chan 
 	return out
 }
 
-func worker[P interface{ ProcessString(P, string) P }](ctx context.Context, buffer <-chan []string) <-chan P {
+func worker[P Processor[P]](ctx context.Context, buffer <-chan []string) <-chan P {
 
 }
 
@@ -70,7 +78,7 @@ func worker[P interface{ ProcessString(P, string) P }](ctx context.Context, buff
 
 // }
 
-func processConcurrent[P interface{ ProcessString(P, string) P }, A interface{ Accumulate([]P) A }](scanner *bufio.Scanner) {
+func processConcurrent[P Processor[P], A Accumulator[A, P]](scanner *bufio.Scanner) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -78,7 +86,7 @@ func processConcurrent[P interface{ ProcessString(P, string) P }, A interface{ A
 	workersSize := 3
 	rowCh := reader(ctx, scanner, bufferSize)
 
-	// for rowBatch := range rowChan {
+	// for rowBatch := range rowCh {
 	// 	fmt.Println("-----")
 	// 	for _, row := range rowBatch {
 	// 		fmt.Println(row)
@@ -92,7 +100,7 @@ func processConcurrent[P interface{ ProcessString(P, string) P }, A interface{ A
 
 }
 
-func ProcessFileConcurrent[P interface{ ProcessString(P, string) P }, A interface{ Accumulate([]P) A }](fileName string) error {
+func ProcessFileConcurrent[P Processor[P], A Accumulator[A, P]](fileName string) error {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return err

@@ -188,7 +188,26 @@ func Test_ProcessSequential(t *testing.T) {
 
 }
 
+type StringProcessor struct {
+	firstNumber int
+}
+
+func (proc StringProcessor) ProcessString(row string) StringProcessor {
+	rows := strings.Split(row, ";")
+	v, _ := strconv.Atoi(rows[1])
+	return StringProcessor{firstNumber: proc.firstNumber + v}
+}
+
+type StringAccumulator struct {
+	firstNumber int
+}
+
+func (acc StringAccumulator) Accumulate(row StringProcessor) StringAccumulator {
+	return StringAccumulator{acc.firstNumber + row.firstNumber}
+}
+
 func Test_ProcessFileConcurrent(t *testing.T) {
+
 	fileName := "testFile.csv"
 	defer os.Remove(fileName)
 
@@ -207,9 +226,7 @@ func Test_ProcessFileConcurrent(t *testing.T) {
 			}
 		}
 	}
-
-	/// P interface{ ProcessString(P, string) P }, A interface{ Accumulate([]P) A }
-	ProcessFileConcurrent(fileName)
+	ProcessFileConcurrent[StringProcessor, StringAccumulator](fileName)
 }
 
 func Test_ProcessFileSequential(t *testing.T) {
