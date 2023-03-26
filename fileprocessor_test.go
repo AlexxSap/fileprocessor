@@ -401,17 +401,42 @@ func BenchmarkProcessFile(b *testing.B) {
 		}
 		defer f.Close()
 
+		dataFormat := "aasadasd;%d;bwefwefwef;%d;cdvdfdfv;%d;458ug\n"
+
 		for i := 0; i < 100000; i++ {
-			data := "ahfdjhgkfd;" + strconv.Itoa(i) + ";asdfdfgkdkfjgkfdjgz\n"
-			_, err = f.WriteString(data)
+			_, err = f.WriteString(fmt.Sprintf(dataFormat, i, i+1, i+2))
 			if err != nil {
 				b.Error(err)
 			}
 		}
 	}
 
-	summOfSecond := func(s []string) {
-		strconv.Atoi(s[1])
+	numberAt1 := 0
+	numberAt3 := 0
+	numberAt5 := 0
+	count := 0
+	numberOfRow := 0
+	words := make(map[string]int)
+
+	summOfNumbers := func(s []string) {
+		v, _ := strconv.Atoi(s[1])
+		numberAt1 += v
+		v, _ = strconv.Atoi(s[3])
+		numberAt3 += v
+		v, _ = strconv.Atoi(s[5])
+		numberAt5 += v
+	}
+	rowCounts := func(s []string) {
+		numberOfRow++
+	}
+	counts := func(s []string) {
+		count += len(s)
+	}
+	wordsCount := func(s []string) {
+		words[s[0]]++
+		words[s[2]]++
+		words[s[4]]++
+		words[s[6]]++
 	}
 
 	cases := []struct {
@@ -421,13 +446,13 @@ func BenchmarkProcessFile(b *testing.B) {
 		{
 			name: "sequential",
 			fn: func() {
-				ProcessFileSequential(fileName, []func(s []string){summOfSecond})
+				ProcessFileSequential(fileName, []func(s []string){summOfNumbers, rowCounts, counts, wordsCount})
 			},
 		},
 		{
 			name: "concurrent",
 			fn: func() {
-				ProcessFileConcurrent[FirstNumberProcessor, FirstNumberAccumulator](fileName)
+				ProcessFileConcurrent[ComplexProcessor, ComplexAccumulator](fileName)
 			},
 		},
 	}
