@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"sync"
 )
 
 func processRow(row []string, processors []func([]string)) {
@@ -36,7 +37,7 @@ type Processor[P any] interface {
 	ProcessString(string) P
 }
 
-type Accumulator[A any, P any] interface {
+type Accumulator[A any, P Processor[P]] interface {
 	Accumulate(P) A
 }
 
@@ -70,15 +71,54 @@ func reader(ctx context.Context, scanner *bufio.Scanner, bufferSize int) <-chan 
 	return out
 }
 
-func worker[P Processor[P]](ctx context.Context, buffer <-chan []string) <-chan P {
+func worker[P Processor[P]](buffer <-chan []string) <-chan []P {
+	out := make(chan []P)
 
+	go func() {
+		defer close(out)
+
+		var p P
+		for rows := range buffer {
+			res := make([]P, len(rows))
+			for _, row := range rows {
+				res = append(res, p.ProcessString(row))
+			}
+			out <- res
+		}
+	}()
+
+	return out
 }
 
-// func combiner(ctx context.Context, inputs ...<-chan temp) <-chan temp {
+func combiner[P Processor[P]](ctx context.Context, inputs ...<-chan []P) <-chan []P {
+	out := make(chan []P)
 
-// }
+	var wg sync.WaitGroup
+	multiplexer := func(p <-chan []P) {
+		defer wg.Done()
 
-func processConcurrent[P Processor[P], A Accumulator[A, P]](scanner *bufio.Scanner) {
+		for in := range p {
+			select {
+			case <-ctx.Done():
+			case out <- in:
+			}
+		}
+	} /// multiplexer
+
+	wg.Add(len(inputs))
+	for _, in := range inputs {
+		go multiplexer(in)
+	}
+
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+
+	return out
+}
+
+func processConcurrent[P Processor[P], A Accumulator[A, P]](scanner *bufio.Scanner) A {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -86,28 +126,30 @@ func processConcurrent[P Processor[P], A Accumulator[A, P]](scanner *bufio.Scann
 	workersSize := 3
 	rowCh := reader(ctx, scanner, bufferSize)
 
-	// for rowBatch := range rowCh {
-	// 	fmt.Println("-----")
-	// 	for _, row := range rowBatch {
-	// 		fmt.Println(row)
-	// 	}
-	// }
-
-	workersCh := make([]<-chan P, workersSize)
+	workersCh := make([]<-chan []P, workersSize)
 	for i := 0; i < workersSize; i++ {
-		workersCh[i] = worker[P](ctx, rowCh)
+		workersCh[i] = worker[P](rowCh)
 	}
 
+	var accumulator A
+	for processed := range combiner(ctx, workersCh...) {
+		for _, p := range processed {
+			accumulator = accumulator.Accumulate(p)
+		}
+	}
+
+	return accumulator
 }
 
-func ProcessFileConcurrent[P Processor[P], A Accumulator[A, P]](fileName string) error {
+func ProcessFileConcurrent[P Processor[P], A Accumulator[A, P]](fileName string) (A, error) {
 	file, err := os.Open(fileName)
 	if err != nil {
-		return err
+		var a A
+		return a, err
 	}
 
 	scanner := bufio.NewScanner(file)
-	processConcurrent[P, A](scanner)
+	res := processConcurrent[P, A](scanner)
 
-	return nil
+	return res, nil
 }

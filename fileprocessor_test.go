@@ -188,29 +188,29 @@ func Test_ProcessSequential(t *testing.T) {
 
 }
 
-type StringProcessor struct {
+type FirstNumberProcessor struct {
 	firstNumber int
 }
 
-func (proc StringProcessor) ProcessString(row string) StringProcessor {
+func (proc FirstNumberProcessor) ProcessString(row string) FirstNumberProcessor {
 	rows := strings.Split(row, ";")
 	v, _ := strconv.Atoi(rows[1])
-	return StringProcessor{firstNumber: proc.firstNumber + v}
+	return FirstNumberProcessor{firstNumber: proc.firstNumber + v}
 }
 
-type StringAccumulator struct {
+type FirstNumberAccumulator struct {
 	firstNumber int
 }
 
-func (acc StringAccumulator) Accumulate(row StringProcessor) StringAccumulator {
-	return StringAccumulator{acc.firstNumber + row.firstNumber}
+func (acc FirstNumberAccumulator) Accumulate(row FirstNumberProcessor) FirstNumberAccumulator {
+	return FirstNumberAccumulator{acc.firstNumber + row.firstNumber}
 }
 
-func Test_ProcessFileConcurrent(t *testing.T) {
-
-	fileName := "testFile.csv"
+func Test_ProcessFileConcurrentSimple(t *testing.T) {
+	fileName := "testConcurrentSimpleFile.csv"
 	defer os.Remove(fileName)
 
+	expectedResult := 0
 	{
 		f, err := os.Create(fileName)
 		if err != nil {
@@ -220,13 +220,22 @@ func Test_ProcessFileConcurrent(t *testing.T) {
 
 		dataFormat := "asdasd;%d;7ieirt;%d;sdfhsdfs;%d\n"
 		for i := 0; i < 10; i++ {
+			expectedResult += i
 			_, err = f.WriteString(fmt.Sprintf(dataFormat, i, i+1, i+2))
 			if err != nil {
 				t.Error(err)
 			}
 		}
 	}
-	ProcessFileConcurrent[StringProcessor, StringAccumulator](fileName)
+
+	res, err := ProcessFileConcurrent[FirstNumberProcessor, FirstNumberAccumulator](fileName)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if res.firstNumber != 45 {
+		t.Errorf("act: %d exp: %d", res.firstNumber, expectedResult)
+	}
 }
 
 func Test_ProcessFileSequential(t *testing.T) {
@@ -295,6 +304,12 @@ func BenchmarkProcessFile(b *testing.B) {
 			name: "sequential",
 			fn: func() {
 				ProcessFileSequential(fileName, []func(s []string){summOfSecond})
+			},
+		},
+		{
+			name: "concurrent",
+			fn: func() {
+				ProcessFileConcurrent[FirstNumberProcessor, FirstNumberAccumulator](fileName)
 			},
 		},
 	}
