@@ -34,10 +34,12 @@ func ProcessFileSequential(fileName string, processors []func([]string)) error {
 }
 
 type Processor[P any] interface {
+	Init(*P)
 	ProcessString(*P, string)
 }
 
 type Accumulator[A any, P Processor[P]] interface {
+	Init(*A)
 	Accumulate(*A, P)
 }
 
@@ -77,6 +79,7 @@ func worker[P Processor[P]](buffer <-chan []string) <-chan P {
 		defer close(out)
 
 		var p P
+		p.Init(&p)
 		for rows := range buffer {
 			for _, row := range rows {
 				p.ProcessString(&p, row)
@@ -131,6 +134,7 @@ func processConcurrent[P Processor[P], A Accumulator[A, P]](scanner *bufio.Scann
 	}
 
 	var accumulator A
+	accumulator.Init(&accumulator)
 	for processed := range combiner(ctx, workersCh...) {
 		accumulator.Accumulate(&accumulator, processed)
 	}

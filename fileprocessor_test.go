@@ -192,6 +192,9 @@ type FirstNumberProcessor struct {
 	firstNumber int
 }
 
+func (acc FirstNumberProcessor) Init(a *FirstNumberProcessor) {
+}
+
 func (proc FirstNumberProcessor) ProcessString(p *FirstNumberProcessor, row string) {
 	rows := strings.Split(row, ";")
 	v, _ := strconv.Atoi(rows[1])
@@ -199,7 +202,10 @@ func (proc FirstNumberProcessor) ProcessString(p *FirstNumberProcessor, row stri
 }
 
 type FirstNumberAccumulator struct {
-	firstNumber int
+	FirstNumberProcessor
+}
+
+func (acc FirstNumberAccumulator) Init(a *FirstNumberAccumulator) {
 }
 
 func (acc FirstNumberAccumulator) Accumulate(a *FirstNumberAccumulator, row FirstNumberProcessor) {
@@ -233,8 +239,120 @@ func Test_ProcessFileConcurrentSimple(t *testing.T) {
 		t.Error(err)
 	}
 
-	if res.firstNumber != 45 {
+	if res.firstNumber != expectedResult {
 		t.Errorf("act: %d exp: %d", res.firstNumber, expectedResult)
+	}
+}
+
+type ComplexProcessor struct {
+	numberAt1   int
+	numberAt3   int
+	numberAt5   int
+	counts      int
+	numberOfRow int
+	words       map[string]int
+}
+
+func (proc ComplexProcessor) Init(p *ComplexProcessor) {
+	p.words = make(map[string]int)
+}
+
+func (proc ComplexProcessor) ProcessString(p *ComplexProcessor, row string) {
+	p.numberOfRow++
+	rows := strings.Split(row, ";")
+	p.counts += len(rows)
+	v, _ := strconv.Atoi(rows[1])
+	p.numberAt1 += v
+	v, _ = strconv.Atoi(rows[3])
+	p.numberAt3 += v
+	v, _ = strconv.Atoi(rows[5])
+	p.numberAt5 += v
+
+	p.words[rows[0]]++
+	p.words[rows[2]]++
+	p.words[rows[4]]++
+	p.words[rows[6]]++
+}
+
+type ComplexAccumulator struct {
+	ComplexProcessor
+}
+
+func (acc ComplexAccumulator) Init(a *ComplexAccumulator) {
+	a.words = make(map[string]int)
+}
+
+func (acc ComplexAccumulator) Accumulate(a *ComplexAccumulator, row ComplexProcessor) {
+	a.numberAt1 += row.numberAt1
+	a.numberAt3 += row.numberAt3
+	a.numberAt5 += row.numberAt5
+	a.counts += row.counts
+	a.numberOfRow += row.numberOfRow
+	for k, v := range row.words {
+		a.words[k] += v
+	}
+}
+
+func Test_ProcessFileConcurrent(t *testing.T) {
+	fileName := "testConcurrentFile.csv"
+	defer os.Remove(fileName)
+
+	expectedResultAt1 := 0
+	expectedResultAt3 := 0
+	expectedResultAt5 := 0
+	expectedCounts := 0
+	expectedNumberOfRow := 0
+	expectedWords := make(map[string]int)
+
+	{
+		f, err := os.Create(fileName)
+		if err != nil {
+			t.Error(err)
+		}
+		defer f.Close()
+
+		dataFormat := "aasadasd;%d;bwefwefwef;%d;cdvdfdfv;%d;458ug\n"
+
+		for i := 0; i < 10; i++ {
+			expectedResultAt1 += i
+			expectedResultAt3 += i + 1
+			expectedResultAt5 += i + 2
+			expectedCounts += 7
+			expectedNumberOfRow++
+			expectedWords["aasadasd"]++
+			expectedWords["bwefwefwef"]++
+			expectedWords["cdvdfdfv"]++
+			expectedWords["458ug"]++
+			_, err = f.WriteString(fmt.Sprintf(dataFormat, i, i+1, i+2))
+			if err != nil {
+				t.Error(err)
+			}
+		}
+	}
+
+	res, err := ProcessFileConcurrent[ComplexProcessor, ComplexAccumulator](fileName)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if res.numberAt1 != expectedResultAt1 {
+		t.Errorf("numberAt1 act: %d exp: %d", res.numberAt1, expectedResultAt1)
+	}
+	if res.numberAt3 != expectedResultAt3 {
+		t.Errorf("numberAt3 act: %d exp: %d", res.numberAt3, expectedResultAt3)
+	}
+	if res.numberAt5 != expectedResultAt5 {
+		t.Errorf("numberAt5 act: %d exp: %d", res.numberAt5, expectedResultAt5)
+	}
+	if res.counts != expectedCounts {
+		t.Errorf("counts act: %d exp: %d", res.counts, expectedCounts)
+	}
+	if res.numberOfRow != expectedNumberOfRow {
+		t.Errorf("numberOfRow act: %d exp: %d", res.numberOfRow, expectedNumberOfRow)
+	}
+
+	if err := compareMaps(res.words, expectedWords); err != nil {
+		t.Error(err)
 	}
 }
 
