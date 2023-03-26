@@ -3,7 +3,6 @@ package fileprocessor
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"os"
 	"strings"
 )
@@ -63,38 +62,44 @@ func reader(ctx context.Context, scanner *bufio.Scanner, bufferSize int) <-chan 
 	return out
 }
 
-// func worker(ctx context.Context, buffer <-chan []string) <-chan temp {
+func worker[P interface{ ProcessString(P, string) P }](ctx context.Context, buffer <-chan []string) <-chan P {
 
-// }
+}
 
 // func combiner(ctx context.Context, inputs ...<-chan temp) <-chan temp {
 
 // }
 
-func processConcurrent(scanner *bufio.Scanner) {
+func processConcurrent[P interface{ ProcessString(P, string) P }, A interface{ Accumulate([]P) A }](scanner *bufio.Scanner) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	bufferSize := 3
-	rowChan := reader(ctx, scanner, bufferSize)
+	workersSize := 3
+	rowCh := reader(ctx, scanner, bufferSize)
 
-	for rowBatch := range rowChan {
-		fmt.Println("-----")
-		for _, row := range rowBatch {
-			fmt.Println(row)
-		}
+	// for rowBatch := range rowChan {
+	// 	fmt.Println("-----")
+	// 	for _, row := range rowBatch {
+	// 		fmt.Println(row)
+	// 	}
+	// }
+
+	workersCh := make([]<-chan P, workersSize)
+	for i := 0; i < workersSize; i++ {
+		workersCh[i] = worker[P](ctx, rowCh)
 	}
 
 }
 
-func ProcessFileConcurrent(fileName string) error {
+func ProcessFileConcurrent[P interface{ ProcessString(P, string) P }, A interface{ Accumulate([]P) A }](fileName string) error {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return err
 	}
 
 	scanner := bufio.NewScanner(file)
-	processConcurrent(scanner)
+	processConcurrent[P, A](scanner)
 
 	return nil
 }

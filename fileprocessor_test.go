@@ -208,6 +208,7 @@ func Test_ProcessFileConcurrent(t *testing.T) {
 		}
 	}
 
+	/// P interface{ ProcessString(P, string) P }, A interface{ Accumulate([]P) A }
 	ProcessFileConcurrent(fileName)
 }
 
