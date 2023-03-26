@@ -176,7 +176,7 @@ func Test_ProcessSequential(t *testing.T) {
 		sum += v
 	}
 
-	ProcessSequential(scan, []func(s []string){frequentFirst, summOfSecond})
+	processSequential(scan, []func(s []string){frequentFirst, summOfSecond})
 
 	if sum != 6 {
 		t.Errorf("wrong summ of second %d", sum)
@@ -186,6 +186,29 @@ func Test_ProcessSequential(t *testing.T) {
 		t.Error(err)
 	}
 
+}
+
+func Test_ProcessFileConcurrent(t *testing.T) {
+	fileName := "testFile.csv"
+	defer os.Remove(fileName)
+
+	{
+		f, err := os.Create(fileName)
+		if err != nil {
+			t.Error(err)
+		}
+		defer f.Close()
+
+		dataFormat := "asdasd;%d;7ieirt;%d;sdfhsdfs;%d\n"
+		for i := 0; i < 10; i++ {
+			_, err = f.WriteString(fmt.Sprintf(dataFormat, i, i+1, i+2))
+			if err != nil {
+				t.Error(err)
+			}
+		}
+	}
+
+	ProcessFileConcurrent(fileName)
 }
 
 func Test_ProcessFileSequential(t *testing.T) {
